@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>钢甲狂潮 - 现代战术坦克对决 | Steel Torrent</title>
+    <!-- 引入 Three.js 用于第一人称 3D 渲染 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- 引入高级字体以契合极致美学规范 -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Outfit:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,600;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="game-wrapper">
+        <!-- 头部导航及指标监控 -->
+        <header>
+            <div class="title-area">
+                <h1>钢甲狂潮</h1>
+                <span>Tactical Combat Simulation</span>
+            </div>
+            
+            <div class="hud-top">
+                <div class="hud-metric">
+                    <span class="hud-label">得分 Score</span>
+                    <span class="hud-value" id="score-display">00000</span>
+                </div>
+                <div class="hud-metric">
+                    <span class="hud-label">当前关卡 Stage</span>
+                    <span class="hud-value" id="stage-display">01</span>
+                </div>
+                <div class="hud-metric">
+                    <span class="hud-label">敌军残余 Enemies</span>
+                    <span class="hud-value enemy-count" id="enemies-left-display">00</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主面板布局 -->
+        <div class="main-layout">
+            <!-- 游戏画布与全屏覆盖遮罩 -->
+            <div class="canvas-container" id="canvas-container">
+                <!-- 3D 渲染主画布 -->
+                <canvas id="game-canvas" width="800" height="600"></canvas>
+                <!-- 舱内 2D HUD 叠层画布 (渲染准星、瞄准仪、扫描雷达) -->
+                <canvas id="hud-canvas" width="800" height="600"></canvas>
+
+                <!-- 开始屏幕遮罩 -->
+                <div class="overlay" id="start-screen">
+                    <h2 class="overlay-title">钢甲狂潮</h2>
+                    <div class="overlay-subtitle">Tactical Retro-Modern Battle</div>
+                    <p class="overlay-text">
+                        欢迎进入高保真战术坦克模拟器。利用鼠标进行精准的炮塔转向瞄准，配合键盘控制底盘机动。躲避障碍，摧毁敌方装甲集群。
+                    </p>
+                    
+                    <div class="difficulty-select">
+                        <button class="diff-btn active" data-level="1">初级侦察 Scout</button>
+                        <button class="diff-btn" data-level="2">标准战役 Combat</button>
+                        <button class="diff-btn" data-level="3">铁血前线 Frontline</button>
+                    </div>
+
+                    <button class="btn" id="start-btn">初始化引擎</button>
+                </div>
+
+                <!-- 暂停屏幕遮罩 -->
+                <div class="overlay hidden" id="pause-screen">
+                    <h2 class="overlay-title">系统暂停</h2>
+                    <div class="overlay-subtitle">Simulation Paused</div>
+                    <p class="overlay-text">战术引擎已挂起。可以调整您的战斗状态。</p>
+                    <button class="btn" id="resume-btn">恢复战术链路</button>
+                </div>
+
+                <!-- 游戏结束屏幕遮罩 -->
+                <div class="overlay hidden" id="gameover-screen">
+                    <h2 class="overlay-title" id="gameover-title">装甲损毁</h2>
+                    <div class="overlay-subtitle" id="gameover-subtitle">Tactical Link Severed</div>
+                    <p class="overlay-text" id="gameover-reason">
+                        您已英勇战死沙场。核心战斗部受损严重，无法维持链路运行。
+                    </p>
+                    <button class="btn" id="restart-btn">重新整备出发</button>
+                </div>
+
+                <!-- 手机端虚拟控制键 (默认在非触屏设备上隐藏，触屏设备上自动激活) -->
+                <div class="mobile-controls-overlay" id="mobile-controls">
+                    <!-- 左侧摇杆 -->
+                    <div class="joystick-container" id="joystick-container">
+                        <div class="joystick-base">
+                            <div class="joystick-knob" id="joystick-knob"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- 右侧按键群 -->
+                    <div class="action-buttons-container">
+                        <!-- 武器轮转切换 -->
+                        <div class="mobile-weapon-selector">
+                            <button class="m-wep-btn active" data-wep="standard">1</button>
+                            <button class="m-wep-btn" data-wep="scatter">2</button>
+                            <button class="m-wep-btn" data-wep="laser">3</button>
+                            <button class="m-wep-btn" data-wep="mine">4</button>
+                            <button class="m-wep-btn" data-wep="ram">5</button>
+                        </div>
+                        
+                        <div class="bottom-actions">
+                            <!-- 空袭按键 -->
+                            <button class="mobile-action-btn airstrike" id="m-btn-airstrike">
+                                <span class="m-btn-icon">⚡</span>
+                                <span class="m-btn-text">空袭</span>
+                            </button>
+                            
+                            <!-- 开火按键 -->
+                            <button class="mobile-action-btn fire" id="m-btn-fire">
+                                <span class="m-btn-icon">🔥</span>
+                                <span class="m-btn-text">开火</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 侧栏辅助系统 -->
+            <div class="sidebar">
+                <!-- 实时健康监视 -->
+                <div class="panel">
+                    <div class="panel-title">
+                        <span>装甲监视系统</span>
+                        <span style="color: var(--primary); font-family: var(--font-mono);">ONLINE</span>
+                    </div>
+                    
+                    <div class="status-row">
+                        <span>核心装甲 Health</span>
+                        <div class="status-bar-bg">
+                            <div class="status-bar-fill health" id="health-bar"></div>
+                        </div>
+                    </div>
+
+                    <div class="status-row">
+                        <span>纳米护盾 Shield</span>
+                        <div class="status-bar-bg">
+                            <div class="status-bar-fill shield" id="shield-bar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 战术军火库 -->
+                <div class="panel">
+                    <div class="panel-title">
+                        <span>武器配置仓</span>
+                        <span style="color: var(--accent); font-family: var(--font-mono);">WEAPONS</span>
+                    </div>
+                    
+                    <div class="weapon-item active" id="weapon-standard">
+                        <span class="weapon-name">[1] 高爆动能弹 AP Shells</span>
+                        <span class="weapon-ammo">UNLIMITED</span>
+                    </div>
+
+                    <div class="weapon-item" id="weapon-scatter">
+                        <span class="weapon-name">[2] 暴风散射弹 Scatter Flak</span>
+                        <span class="weapon-ammo" id="scatter-ammo">15</span>
+                    </div>
+
+                    <div class="weapon-item" id="weapon-laser">
+                        <span class="weapon-name">[3] 纳米穿透激光 Laser Beam</span>
+                        <span class="weapon-ammo" id="laser-ammo">08</span>
+                    </div>
+
+                    <div class="weapon-item" id="weapon-mine">
+                        <span class="weapon-name">[4] 磁暴休眠雷 EMP Mine</span>
+                        <span class="weapon-ammo" id="mine-ammo">03</span>
+                    </div>
+
+                    <div class="weapon-item" id="weapon-ram">
+                        <span class="weapon-name">[5] 等离子冲撞 Shield Ram</span>
+                        <span class="weapon-ammo" id="ram-cooldown">READY</span>
+                    </div>
+
+                    <div class="weapon-item" id="weapon-missile">
+                        <span class="weapon-name">[Space] 战术空袭部署 Airstrike</span>
+                        <span class="weapon-ammo" id="airstrike-ammo">01</span>
+                    </div>
+                </div>
+
+                <!-- 控制指南 -->
+                <div class="panel">
+                    <div class="panel-title">
+                        <span>战术机动协同</span>
+                        <span style="color: var(--text-muted); font-size: 0.7rem;">TELEMETRY</span>
+                    </div>
+                    <div class="controls-grid">
+                        <div class="control-item">
+                            <span class="control-key">W / A / S / D</span>
+                            <span class="control-desc">坦克底盘移动控制</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-key">鼠标瞄准 Mouse</span>
+                            <span class="control-desc">炮塔独立方向锁定</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-key">1 / 2 / 3 / 4 / 5</span>
+                            <span class="control-desc">五大机载载荷快捷切换</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-key">鼠标滚轮 Scroll</span>
+                            <span class="control-desc">在军    <!-- 战术游戏引擎主程序 -->
+    <script src="game.js"></script>
+</body>
+</html>
